@@ -14,9 +14,11 @@ import android.os.Bundle;
 import android.os.Environment;
 import androidx.annotation.Nullable;
 import androidx.core.app.ActivityCompat;
-import android.util.Log;
+import java.util.Map;
+import java.util.HashMap;
 
 import com.facebook.react.bridge.WritableMap;
+import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
 
 import com.github.se_bastiaan.torrentstream.StreamStatus;
@@ -25,10 +27,9 @@ import com.github.se_bastiaan.torrentstream.TorrentOptions;
 import com.github.se_bastiaan.torrentstream.TorrentStream;
 import com.github.se_bastiaan.torrentstream.listeners.TorrentListener;
 
-public class TorrentStreamerModule extends ReactContextBaseJavaModule implements TorrentListener {
-
+public class TorrentStreamerModule extends ReactContextBaseJavaModule implements ICommand {
     private final ReactApplicationContext reactContext;
-    private TorrentStream mTorrentStream = null;
+    private Map<String, TorrentItem> torrents = new HashMap<String, TorrentItem>();
 
     public TorrentStreamerModule(ReactApplicationContext reactContext) {
         super(reactContext);
@@ -41,105 +42,44 @@ public class TorrentStreamerModule extends ReactContextBaseJavaModule implements
     }
 
     @ReactMethod
-    public void setup(String location, Boolean removeAfterStop) {
-        TorrentOptions torrentOptions = new TorrentOptions.Builder()
-                .saveLocation(location)
-                .maxConnections(200)
-                .autoDownload(true)
-                .removeFilesAfterStop(removeAfterStop)
-                .build();
-
-        mTorrentStream = TorrentStream.init(torrentOptions);
-        mTorrentStream.addListener(this);
-    }
-
-    @ReactMethod
-    public void setup(String location) {
-        this.setup(location, true);
-    }
-
-    private void setup() {
-        if (mTorrentStream == null) {
-            this.setup("" + Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), true);
-        }
+    public void createTorrent(String magnetUrl, String location, Boolean removeAfterStop) {
+        if (this.torrents.containsKey(magnetUrl))
+            return;
+        TorrentItem torrent = new TorrentItem(magnetUrl, location, removeAfterStop, this);
+        this.torrents.put(magnetUrl, torrent);
     }
 
     @ReactMethod
     public void start(String magnetUrl) {
-        this.setup();
-
-        mTorrentStream.startStream(magnetUrl);
+        TorrentItem torrent = this.torrents.get(magnetUrl);
+        if (torrent != null)
+            torrent.start();
     }
 
     @ReactMethod
-    public void stop() {
-        if (mTorrentStream != null && mTorrentStream.isStreaming()) {
-            mTorrentStream.stopStream();
-        }
+    public void stop(String magnetUrl) {
+        TorrentItem torrent = this.torrents.get(magnetUrl);
+        if (torrent != null)
+            torrent.stop();
+
+        destroy(magnetUrl);
     }
 
-    private void sendEvent(String eventName, @Nullable WritableMap params) {
-        this.reactContext
-                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-                .emit(eventName, params);
+    @ReactMethod
+    public void destroy(String magnetUrl) {
+        this.torrents.remove(magnetUrl);
     }
 
-    @Override
-    public void onStreamPrepared(Torrent torrent) {
-//        Log.d("data", "OnStreamPrepared");
-
-        WritableMap params = Arguments.createMap();
-        params.putString("data", "OnStreamPrepared");
-        sendEvent("progress", params);
-//        torrent.startDownload();
+    @ReactMethod
+    public void setSelectedFileIndex(String magnetUrl, Integer selectedFileIndex) {
+        TorrentItem torrent = this.torrents.get(magnetUrl);
+        if (torrent != null)
+            torrent.setSelectedFileIndex(selectedFileIndex);
     }
 
-    @Override
-    public void onStreamStarted(Torrent torrent) {
-//        Log.d("data", "onStreamStarted");
-
-        WritableMap params = Arguments.createMap();
-        params.putString("data", "onStreamStarted");
-        sendEvent("progress", params);
-    }
-
-    @Override
-    public void onStreamError(Torrent torrent, Exception e) {
-        WritableMap params = Arguments.createMap();
-        params.putString("msg", e.getMessage());
-        sendEvent("error", params);
-    }
-
-    @Override
-    public void onStreamReady(Torrent torrent) {
-//        Log.d("url", torrent.getVideoFile().toString());
-
-        WritableMap params = Arguments.createMap();
-        params.putString("url", torrent.getVideoFile().toString());
-        params.putString("filename", torrent.getTorrentHandle().name());
-        sendEvent("ready", params);
-    }
-
-    @Override
-    public void onStreamProgress(Torrent torrent, StreamStatus status) {
-//        Log.d("buffer", "" + status.bufferProgress);
-//        Log.d("download", "" + status.downloadSpeed);
-//        Log.d("Progress", "" + status.progress);
-//        Log.d("seeds", "" + status.seeds);
-
-        WritableMap params = Arguments.createMap();
-        params.putString("buffer", "" + status.bufferProgress);
-        params.putString("downloadSpeed", "" + status.downloadSpeed);
-        params.putString("progress", "" + status.progress);
-        params.putString("seeds", "" + status.seeds);
-        sendEvent("status", params);
-    }
-
-    @Override
-    public void onStreamStopped() {
-        WritableMap params = Arguments.createMap();
-        params.putString("msg", "OnStreamStoped");
-        sendEvent("stop", params);
+    public void sendEvent(String magnetUrl, String eventName, @Nullable WritableMap params) {
+        eventName = eventName + magnetUrl;
+        this.reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class).emit(eventName, params);
     }
 
     @ReactMethod
@@ -148,9 +88,10 @@ public class TorrentStreamerModule extends ReactContextBaseJavaModule implements
         intent.setDataAndType(Uri.parse(url), type);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
 
-        //Check that an app exists to receive the intent
+        // Check that an app exists to receive the intent
         if (intent.resolveActivity(this.reactContext.getPackageManager()) != null) {
             this.reactContext.startActivity(intent);
         }
     }
+
 }
