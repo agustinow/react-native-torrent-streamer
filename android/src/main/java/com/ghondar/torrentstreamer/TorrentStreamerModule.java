@@ -6,6 +6,7 @@ import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.Callback;
 import com.facebook.react.bridge.Arguments;
 
+import java.lang.Thread;
 import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -78,8 +79,20 @@ public class TorrentStreamerModule extends ReactContextBaseJavaModule implements
     }
 
     public void sendEvent(String magnetUrl, String eventName, @Nullable WritableMap params) {
-        eventName = eventName + magnetUrl;
-        this.reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class).emit(eventName, params);
+
+        new Thread() {
+            public void run() {
+                try {
+                    Thread.sleep(20);
+
+                    eventName = eventName + magnetUrl;
+                    this.reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class).emit(eventName,
+                            params);
+                } catch (InterruptedException v) {
+                    System.out.println(v);
+                }
+            }
+        }.start();
     }
 
     @ReactMethod
