@@ -207,14 +207,21 @@ public class TorrentItem implements TorrentListener {
 
                     // Count downloaded pieces for this file
                     int downloadedPieces = 0;
-                    for (int i = firstPiece; i <= lastPiece; i++) {
-                        if (torrent.getTorrentHandle().status().pieces().getBit(i)) {
-                            downloadedPieces++;
+                    try {
+                        com.frostwire.jlibtorrent.PieceIndexBitfield pieces = torrent.getTorrentHandle().status().pieces();
+                        if (pieces != null) {
+                            for (int i = firstPiece; i <= lastPiece; i++) {
+                                if (pieces.getBit(i)) {
+                                    downloadedPieces++;
+                                }
+                            }
+                            // Calculate file-specific progress
+                            fileProgress = totalPieces > 0 ? (float) downloadedPieces / totalPieces : 0;
                         }
+                    } catch (Exception pieceException) {
+                        // Pieces not ready yet, fall back to overall progress
+                        fileProgress = status.progress;
                     }
-
-                    // Calculate file-specific progress
-                    fileProgress = totalPieces > 0 ? (float) downloadedPieces / totalPieces : 0;
                 }
             } catch (Exception e) {
                 // Fall back to overall progress on error
