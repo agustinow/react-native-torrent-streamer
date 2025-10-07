@@ -15,6 +15,7 @@ declare module 'react-native-torrent-streamer' {
     downloadRate: number;
     numSeeds: number;
     buffer: number;
+    sequentialProgress: number;
   }
 
   export interface TorrentEventSubscription {
