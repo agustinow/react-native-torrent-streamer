@@ -8,6 +8,7 @@
   "files": [
     "README.md",
     "android",
+    "src",
     "index.js",
     "index.d.ts",
     "react-native.config.js"
@@ -44,13 +45,5 @@
   "devDependencies": {
     "react": "*",
     "react-native": "*"
-  },
-  "codegenConfig": {
-    "name": "RNTorrentStreamerSpec",
-    "type": "modules",
-    "jsSrcsDir": "src",
-    "android": {
-      "javaPackageName": "com.ghondar.torrentstreamer"
-    }
   }
 }
