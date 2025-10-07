@@ -176,60 +176,8 @@ public class TorrentItem implements TorrentListener {
         params.putString("buffer", "" + status.bufferProgress);
         params.putString("downloadSpeed", "" + status.downloadSpeed);
 
-        // Calculate progress based on selected file only
-        float fileProgress = status.progress;
-        if (this.selectedFileSize > 0 && torrent.getTorrentHandle() != null) {
-            try {
-                FileStorage fileStorage = torrent.getTorrentHandle().torrentFile().files();
-                int actualIndex = this.selectedFileIndex;
-
-                // If -1, find the largest file index
-                if (actualIndex == -1) {
-                    long maxSize = 0;
-                    for (int i = 0; i < fileStorage.numFiles(); i++) {
-                        long fileSize = fileStorage.fileSize(i);
-                        if (fileSize > maxSize) {
-                            maxSize = fileSize;
-                            actualIndex = i;
-                        }
-                    }
-                }
-
-                if (actualIndex >= 0 && actualIndex < fileStorage.numFiles()) {
-                    // Get piece range for this file
-                    long pieceSize = torrent.getTorrentHandle().torrentFile().pieceLength();
-                    long fileOffset = fileStorage.fileOffset(actualIndex);
-                    long fileSize = fileStorage.fileSize(actualIndex);
-
-                    int firstPiece = (int) (fileOffset / pieceSize);
-                    int lastPiece = (int) ((fileOffset + fileSize - 1) / pieceSize);
-                    int totalPieces = lastPiece - firstPiece + 1;
-
-                    // Count downloaded pieces for this file
-                    int downloadedPieces = 0;
-                    try {
-                        com.frostwire.jlibtorrent.PieceIndexBitfield pieces = torrent.getTorrentHandle().status().pieces();
-                        if (pieces != null) {
-                            for (int i = firstPiece; i <= lastPiece; i++) {
-                                if (pieces.getBit(i)) {
-                                    downloadedPieces++;
-                                }
-                            }
-                            // Calculate file-specific progress
-                            fileProgress = totalPieces > 0 ? (float) downloadedPieces / totalPieces : 0;
-                        }
-                    } catch (Exception pieceException) {
-                        // Pieces not ready yet, fall back to overall progress
-                        fileProgress = status.progress;
-                    }
-                }
-            } catch (Exception e) {
-                // Fall back to overall progress on error
-                fileProgress = status.progress;
-            }
-        }
-
-        params.putString("progress", "" + fileProgress);
+        // Use overall progress to avoid crashes
+        params.putString("progress", "" + status.progress);
         params.putString("seeds", "" + status.seeds);
         this.command.sendEvent(this.magnetUrl, "status", params);
     }
