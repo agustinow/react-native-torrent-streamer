@@ -38,6 +38,8 @@ public class TorrentItem implements TorrentListener {
     private final String _location;
     private TorrentStreamServer httpServer = null;
     private final Context context;
+    private int selectedFileIndex = -1;
+    private long selectedFileSize = 0;
 
     public TorrentItem(String magnetUrl, String location, Boolean removeAfterStop, ICommand command, Context context) {
         this.context = context;
@@ -77,8 +79,30 @@ public class TorrentItem implements TorrentListener {
     }
 
     public void setSelectedFileIndex(Integer selectedFileIndex) {
-        if (this._torrent != null)
+        if (this._torrent != null) {
             this._torrent.setSelectedFileIndex(selectedFileIndex);
+            this.selectedFileIndex = selectedFileIndex;
+
+            // Get the selected file size for progress calculation
+            FileStorage fileStorage = this._torrent.getTorrentHandle().torrentFile().files();
+            int actualIndex = selectedFileIndex;
+
+            // If -1, find the largest file
+            if (actualIndex == -1) {
+                long maxSize = 0;
+                for (int i = 0; i < fileStorage.numFiles(); i++) {
+                    long fileSize = fileStorage.fileSize(i);
+                    if (fileSize > maxSize) {
+                        maxSize = fileSize;
+                        actualIndex = i;
+                    }
+                }
+            }
+
+            if (actualIndex >= 0 && actualIndex < fileStorage.numFiles()) {
+                this.selectedFileSize = fileStorage.fileSize(actualIndex);
+            }
+        }
     }
 
     private WritableArray getFileInfos() {
@@ -151,7 +175,54 @@ public class TorrentItem implements TorrentListener {
         params.putString("magnetUrl", "" + this.magnetUrl);
         params.putString("buffer", "" + status.bufferProgress);
         params.putString("downloadSpeed", "" + status.downloadSpeed);
-        params.putString("progress", "" + status.progress);
+
+        // Calculate progress based on selected file only
+        float fileProgress = status.progress;
+        if (this.selectedFileSize > 0 && torrent.getTorrentHandle() != null) {
+            try {
+                FileStorage fileStorage = torrent.getTorrentHandle().torrentFile().files();
+                int actualIndex = this.selectedFileIndex;
+
+                // If -1, find the largest file index
+                if (actualIndex == -1) {
+                    long maxSize = 0;
+                    for (int i = 0; i < fileStorage.numFiles(); i++) {
+                        long fileSize = fileStorage.fileSize(i);
+                        if (fileSize > maxSize) {
+                            maxSize = fileSize;
+                            actualIndex = i;
+                        }
+                    }
+                }
+
+                if (actualIndex >= 0 && actualIndex < fileStorage.numFiles()) {
+                    // Get piece range for this file
+                    long pieceSize = torrent.getTorrentHandle().torrentFile().pieceLength();
+                    long fileOffset = fileStorage.fileOffset(actualIndex);
+                    long fileSize = fileStorage.fileSize(actualIndex);
+
+                    int firstPiece = (int) (fileOffset / pieceSize);
+                    int lastPiece = (int) ((fileOffset + fileSize - 1) / pieceSize);
+                    int totalPieces = lastPiece - firstPiece + 1;
+
+                    // Count downloaded pieces for this file
+                    int downloadedPieces = 0;
+                    for (int i = firstPiece; i <= lastPiece; i++) {
+                        if (torrent.getTorrentHandle().status().pieces().getBit(i)) {
+                            downloadedPieces++;
+                        }
+                    }
+
+                    // Calculate file-specific progress
+                    fileProgress = totalPieces > 0 ? (float) downloadedPieces / totalPieces : 0;
+                }
+            } catch (Exception e) {
+                // Fall back to overall progress on error
+                fileProgress = status.progress;
+            }
+        }
+
+        params.putString("progress", "" + fileProgress);
         params.putString("seeds", "" + status.seeds);
         this.command.sendEvent(this.magnetUrl, "status", params);
     }

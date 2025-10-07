@@ -50,6 +50,7 @@ const TorrentStreamer = {
           });
           // Remove this one-time listener
           DeviceEventEmitter.removeListener(TORRENT_STREAMER_EVENTS.ready + magnetUri, readyListener);
+          DeviceEventEmitter.removeListener(TORRENT_STREAMER_EVENTS.progress + magnetUri, progressListener);
         }
       };
 
@@ -59,11 +60,21 @@ const TorrentStreamer = {
           reject(new Error(data.msg));
           // Remove this one-time listener
           DeviceEventEmitter.removeListener(TORRENT_STREAMER_EVENTS.error + magnetUri, errorListener);
+          DeviceEventEmitter.removeListener(TORRENT_STREAMER_EVENTS.progress + magnetUri, progressListener);
+        }
+      };
+
+      // Set up progress listener to auto-select largest file
+      const progressListener = (data) => {
+        if (data.magnetUrl === magnetUri && data.files && data.files.length > 0) {
+          // Automatically select largest file (-1 = largest file)
+          NativeTorrentStreamer.setSelectedFileIndex(magnetUri, -1);
         }
       };
 
       DeviceEventEmitter.addListener(TORRENT_STREAMER_EVENTS.ready + magnetUri, readyListener);
       DeviceEventEmitter.addListener(TORRENT_STREAMER_EVENTS.error + magnetUri, errorListener);
+      DeviceEventEmitter.addListener(TORRENT_STREAMER_EVENTS.progress + magnetUri, progressListener);
 
       // Start the torrent
       NativeTorrentStreamer.createTorrent(magnetUri, saveLocation, removeAfterStop);
