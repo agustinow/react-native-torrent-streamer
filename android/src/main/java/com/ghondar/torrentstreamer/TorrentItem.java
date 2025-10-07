@@ -181,37 +181,7 @@ public class TorrentItem implements TorrentListener {
         params.putString("progress", "" + status.progress);
         params.putString("seeds", "" + status.seeds);
 
-        // Calculate sequential playable progress
-        float sequentialProgress = calculateSequentialProgress(torrent);
-        params.putString("sequentialProgress", "" + sequentialProgress);
-
         this.command.sendEvent(this.magnetUrl, "status", params);
-    }
-
-    private float calculateSequentialProgress(Torrent torrent) {
-        if (this.selectedFileSize == 0) {
-            return 0;
-        }
-
-        // Binary search starting from last known position (progress only moves forward)
-        long left = this.lastSequentialByte;
-        long right = this.selectedFileSize;
-        long furthestSequential = this.lastSequentialByte;
-
-        while (left <= right) {
-            long mid = left + (right - left) / 2;
-            if (torrent.hasBytes(mid)) {
-                furthestSequential = mid;
-                left = mid + 1;
-            } else {
-                right = mid - 1;
-            }
-        }
-
-        // Cache result for next call
-        this.lastSequentialByte = furthestSequential;
-
-        return (furthestSequential / (float) this.selectedFileSize) * 100;
     }
 
     @Override
