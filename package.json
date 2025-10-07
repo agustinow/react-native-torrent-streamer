@@ -1,13 +1,16 @@
 {
   "name": "react-native-torrent-streamer",
   "title": "React Native Torrent Streamer",
-  "version": "0.2.3",
-  "description": "Torrent Streamer for react-native",
+  "version": "0.3.0",
+  "description": "Torrent Streamer for react-native with Expo and New Architecture support",
   "main": "index.js",
+  "types": "index.d.ts",
   "files": [
     "README.md",
     "android",
-    "index.js"
+    "index.js",
+    "index.d.ts",
+    "react-native.config.js"
   ],
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -23,7 +26,9 @@
     "torrent",
     "streamer",
     "stream",
-    "video"
+    "video",
+    "expo",
+    "new-architecture"
   ],
   "author": {
     "name": "Anthony Bryan Gavilan Vinces",
@@ -32,8 +37,20 @@
   "license": "MIT",
   "licenseFilename": "LICENSE",
   "readmeFilename": "README.md",
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  },
   "devDependencies": {
     "react": "*",
     "react-native": "*"
+  },
+  "codegenConfig": {
+    "name": "RNTorrentStreamerSpec",
+    "type": "modules",
+    "jsSrcsDir": "src",
+    "android": {
+      "javaPackageName": "com.ghondar.torrentstreamer"
+    }
   }
 }

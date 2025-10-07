@@ -45,7 +45,7 @@ public class TorrentStreamerModule extends ReactContextBaseJavaModule implements
     public void createTorrent(String magnetUrl, String location, Boolean removeAfterStop) {
         if (this.torrents.containsKey(magnetUrl))
             return;
-        TorrentItem torrent = new TorrentItem(magnetUrl, location, removeAfterStop, this);
+        TorrentItem torrent = new TorrentItem(magnetUrl, location, removeAfterStop, this, this.reactContext);
         this.torrents.put(magnetUrl, torrent);
     }
 

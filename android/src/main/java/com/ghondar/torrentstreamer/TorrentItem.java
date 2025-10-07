@@ -7,6 +7,7 @@ import com.facebook.react.bridge.Callback;
 import com.facebook.react.bridge.Arguments;
 
 import android.Manifest;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
@@ -14,6 +15,7 @@ import android.os.Bundle;
 import android.os.Environment;
 import androidx.annotation.Nullable;
 import androidx.core.app.ActivityCompat;
+import java.io.File;
 import java.util.Map;
 import java.util.HashMap;
 import com.frostwire.jlibtorrent.FileStorage;
@@ -34,13 +36,17 @@ public class TorrentItem implements TorrentListener {
     private final ICommand command;
     private Torrent _torrent = null;
     private final String _location;
+    private TorrentStreamServer httpServer = null;
+    private final Context context;
 
-    public TorrentItem(String magnetUrl, String location, Boolean removeAfterStop, ICommand command) {
-        // Environment.DIRECTORY_DOWNLOADS
-        // Environment.getExternalStoragePublicDirectory(Environment.getDownloadCacheDirectory());
-        // Environment.getDownloadCacheDirectory().getPath();
-        if (location == null)
-            location = "" + Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+    public TorrentItem(String magnetUrl, String location, Boolean removeAfterStop, ICommand command, Context context) {
+        this.context = context;
+
+        // Use app-specific storage (Android 11+ compatible)
+        if (location == null) {
+            File cacheDir = context.getCacheDir();
+            location = new File(cacheDir, "torrents").getAbsolutePath();
+        }
 
         this._location = location;
         this.magnetUrl = magnetUrl;
@@ -63,6 +69,10 @@ public class TorrentItem implements TorrentListener {
     public void stop() {
         if (this.mTorrentStream != null && this.mTorrentStream.isStreaming()) {
             this.mTorrentStream.stopStream();
+        }
+        if (this.httpServer != null) {
+            this.httpServer.stop();
+            this.httpServer = null;
         }
     }
 
@@ -112,11 +122,27 @@ public class TorrentItem implements TorrentListener {
 
     @Override
     public void onStreamReady(Torrent torrent) {
-        WritableMap params = Arguments.createMap();
-        params.putString("magnetUrl", "" + this.magnetUrl);
-        params.putString("url", torrent.getVideoFile().toString());
-        params.putString("filename", torrent.getTorrentHandle().name());
-        this.command.sendEvent(this.magnetUrl, "ready", params);
+        try {
+            // Start HTTP server if not already running
+            if (this.httpServer == null) {
+                this.httpServer = new TorrentStreamServer(0); // 0 = auto-assign port
+            }
+
+            File videoFile = torrent.getVideoFile();
+            this.httpServer.setVideoFile(videoFile);
+
+            WritableMap params = Arguments.createMap();
+            params.putString("magnetUrl", this.magnetUrl);
+            params.putString("url", this.httpServer.getServerUrl());
+            params.putString("fileName", torrent.getTorrentHandle().name());
+            params.putDouble("fileSize", videoFile.length());
+            this.command.sendEvent(this.magnetUrl, "ready", params);
+        } catch (Exception e) {
+            WritableMap errorParams = Arguments.createMap();
+            errorParams.putString("magnetUrl", this.magnetUrl);
+            errorParams.putString("msg", "Failed to start HTTP server: " + e.getMessage());
+            this.command.sendEvent(this.magnetUrl, "error", errorParams);
+        }
     }
 
     @Override
