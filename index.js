@@ -40,6 +40,8 @@ const TorrentStreamer = {
     currentMagnetUrl = magnetUri;
 
     return new Promise((resolve, reject) => {
+      let readySubscription, errorSubscription, progressSubscription;
+
       // Set up one-time ready listener
       const readyListener = (data) => {
         if (data.magnetUrl === magnetUri) {
@@ -48,9 +50,10 @@ const TorrentStreamer = {
             fileName: data.fileName,
             fileSize: data.fileSize
           });
-          // Remove this one-time listener
-          DeviceEventEmitter.removeListener(TORRENT_STREAMER_EVENTS.ready + magnetUri, readyListener);
-          DeviceEventEmitter.removeListener(TORRENT_STREAMER_EVENTS.progress + magnetUri, progressListener);
+          // Remove listeners
+          readySubscription?.remove();
+          errorSubscription?.remove();
+          progressSubscription?.remove();
         }
       };
 
@@ -58,9 +61,10 @@ const TorrentStreamer = {
       const errorListener = (data) => {
         if (data.magnetUrl === magnetUri) {
           reject(new Error(data.msg));
-          // Remove this one-time listener
-          DeviceEventEmitter.removeListener(TORRENT_STREAMER_EVENTS.error + magnetUri, errorListener);
-          DeviceEventEmitter.removeListener(TORRENT_STREAMER_EVENTS.progress + magnetUri, progressListener);
+          // Remove listeners
+          readySubscription?.remove();
+          errorSubscription?.remove();
+          progressSubscription?.remove();
         }
       };
 
@@ -72,9 +76,9 @@ const TorrentStreamer = {
         }
       };
 
-      DeviceEventEmitter.addListener(TORRENT_STREAMER_EVENTS.ready + magnetUri, readyListener);
-      DeviceEventEmitter.addListener(TORRENT_STREAMER_EVENTS.error + magnetUri, errorListener);
-      DeviceEventEmitter.addListener(TORRENT_STREAMER_EVENTS.progress + magnetUri, progressListener);
+      readySubscription = DeviceEventEmitter.addListener(TORRENT_STREAMER_EVENTS.ready + magnetUri, readyListener);
+      errorSubscription = DeviceEventEmitter.addListener(TORRENT_STREAMER_EVENTS.error + magnetUri, errorListener);
+      progressSubscription = DeviceEventEmitter.addListener(TORRENT_STREAMER_EVENTS.progress + magnetUri, progressListener);
 
       // Start the torrent
       NativeTorrentStreamer.createTorrent(magnetUri, saveLocation, removeAfterStop);
