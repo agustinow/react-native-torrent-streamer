@@ -15,6 +15,48 @@ let currentMagnetUrl = null;
 let eventListeners = {};
 let eventSubscriptions = {};
 
+// Helper function to reattach all event listeners with correct magnetUrl
+function reattachEventListeners() {
+  // Remove old subscriptions
+  Object.keys(eventSubscriptions).forEach(key => {
+    const subscription = eventSubscriptions[key];
+    if (subscription && subscription.remove) {
+      subscription.remove();
+    }
+  });
+  eventSubscriptions = {};
+
+  // Reattach with correct magnetUrl
+  Object.keys(eventListeners).forEach(event => {
+    const handlers = eventListeners[event] || [];
+    if (handlers.length > 0) {
+      const nativeListener = (data) => {
+        // Transform data to match expected format
+        let transformedData = data;
+
+        if (event === 'status') {
+          transformedData = {
+            progress: parseFloat(data.progress || 0),
+            downloadRate: parseFloat(data.downloadSpeed || 0),
+            numSeeds: parseInt(data.seeds || 0),
+            buffer: parseFloat(data.buffer || 0)
+          };
+        }
+
+        // Call all registered handlers
+        handlers.forEach(h => h(transformedData));
+      };
+
+      const eventName = currentMagnetUrl
+        ? TORRENT_STREAMER_EVENTS[event] + currentMagnetUrl
+        : TORRENT_STREAMER_EVENTS[event];
+
+      const subscription = DeviceEventEmitter.addListener(eventName, nativeListener);
+      eventSubscriptions[event] = subscription;
+    }
+  });
+}
+
 // Modern API (default export)
 const TorrentStreamer = {
   /**
@@ -38,6 +80,7 @@ const TorrentStreamer = {
     }
 
     currentMagnetUrl = magnetUri;
+    reattachEventListeners();
 
     return new Promise((resolve, reject) => {
       let readySubscription, errorSubscription, progressSubscription;
@@ -99,9 +142,9 @@ const TorrentStreamer = {
           subscription.remove();
         }
       });
-      eventListeners = {};
       eventSubscriptions = {};
       currentMagnetUrl = null;
+      reattachEventListeners();
     }
   },
 
@@ -184,64 +227,5 @@ const TorrentStreamer = {
     }
   }
 };
-
-// Legacy class-based API (for backward compatibility)
-export class Torrent {
-  constructor(magnetUrl, saveLocation, removeAfterStop) {
-    this.magnetUrl = magnetUrl;
-    this.saveLocation = saveLocation;
-    this.removeAfterStop = removeAfterStop !== false;
-    this.files = [];
-    this._TorrentStreamerDownloadHandlers = {};
-
-    if (!this.magnetUrl) {
-      throw new Error("magnetUrl cannot be empty");
-    }
-
-    this.addEventListener("progress", (params) => {
-      if (this.files.length <= 0 && params.files) {
-        this.files = params.files;
-      }
-      this.setSelectedFileIndex(-1);
-    });
-  }
-
-  setSelectedFileIndex(selectedFileIndex) {
-    NativeTorrentStreamer.setSelectedFileIndex(this.magnetUrl, selectedFileIndex);
-  }
-
-  addEventListener(type, handler) {
-    const eventName = TORRENT_STREAMER_EVENTS[type] + this.magnetUrl;
-    this._TorrentStreamerDownloadHandlers[handler] = DeviceEventEmitter.addListener(eventName, (torrentStreamerData) => {
-      const tr = Object.assign({}, this);
-      delete tr._TorrentStreamerDownloadHandlers;
-      handler(Object.assign(torrentStreamerData, { torrent: tr }));
-    });
-    return this;
-  }
-
-  clearEvents() {
-    Object.keys(this._TorrentStreamerDownloadHandlers).forEach(x => {
-      const item = this._TorrentStreamerDownloadHandlers[x];
-      if (item && item.remove) {
-        item.remove();
-        delete this._TorrentStreamerDownloadHandlers[x];
-      }
-    });
-  }
-
-  async start() {
-    await NativeTorrentStreamer.createTorrent(this.magnetUrl, this.saveLocation, this.removeAfterStop);
-    NativeTorrentStreamer.start(this.magnetUrl);
-  }
-
-  stop() {
-    NativeTorrentStreamer.stop(this.magnetUrl);
-  }
-
-  destroy() {
-    NativeTorrentStreamer.stop(this.magnetUrl);
-  }
-}
 
 export default TorrentStreamer;
