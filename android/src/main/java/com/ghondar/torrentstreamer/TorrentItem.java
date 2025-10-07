@@ -18,7 +18,7 @@ import androidx.core.app.ActivityCompat;
 import java.io.File;
 import java.util.Map;
 import java.util.HashMap;
-import com.frostwire.jlibtorrent.FileStorage;
+import org.libtorrent4j.FileStorage;
 
 import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.bridge.WritableArray;
@@ -40,6 +40,7 @@ public class TorrentItem implements TorrentListener {
     private final Context context;
     private int selectedFileIndex = -1;
     private long selectedFileSize = 0;
+    private long lastSequentialByte = 0;
 
     public TorrentItem(String magnetUrl, String location, Boolean removeAfterStop, ICommand command, Context context) {
         this.context = context;
@@ -158,7 +159,7 @@ public class TorrentItem implements TorrentListener {
             WritableMap params = Arguments.createMap();
             params.putString("magnetUrl", this.magnetUrl);
             params.putString("url", this.httpServer.getServerUrl());
-            params.putString("fileName", torrent.getTorrentHandle().name());
+            params.putString("fileName", torrent.getTorrentHandle().getName());
             params.putDouble("fileSize", videoFile.length());
             this.command.sendEvent(this.magnetUrl, "ready", params);
         } catch (Exception e) {
@@ -179,7 +180,38 @@ public class TorrentItem implements TorrentListener {
         // Use overall progress to avoid crashes
         params.putString("progress", "" + status.progress);
         params.putString("seeds", "" + status.seeds);
+
+        // Calculate sequential playable progress
+        float sequentialProgress = calculateSequentialProgress(torrent);
+        params.putString("sequentialProgress", "" + sequentialProgress);
+
         this.command.sendEvent(this.magnetUrl, "status", params);
+    }
+
+    private float calculateSequentialProgress(Torrent torrent) {
+        if (this.selectedFileSize == 0) {
+            return 0;
+        }
+
+        // Binary search starting from last known position (progress only moves forward)
+        long left = this.lastSequentialByte;
+        long right = this.selectedFileSize;
+        long furthestSequential = this.lastSequentialByte;
+
+        while (left <= right) {
+            long mid = left + (right - left) / 2;
+            if (torrent.hasBytes(mid)) {
+                furthestSequential = mid;
+                left = mid + 1;
+            } else {
+                right = mid - 1;
+            }
+        }
+
+        // Cache result for next call
+        this.lastSequentialByte = furthestSequential;
+
+        return (furthestSequential / (float) this.selectedFileSize) * 100;
     }
 
     @Override
